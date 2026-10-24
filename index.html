@@ -1,0 +1,2041 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>My Video</title>
+
+<style>
+*{
+    box-sizing:border-box;
+    -webkit-tap-highlight-color:transparent;
+}
+
+html,body{
+    margin:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+    background:#000;
+    color:#fff;
+    font-family:Arial,sans-serif;
+}
+
+button,input,textarea{
+    font:inherit;
+}
+
+button{
+    border:0;
+    color:#fff;
+    background:#292d35;
+    border-radius:9px;
+    padding:10px 14px;
+    cursor:pointer;
+}
+
+button:active{
+    transform:scale(.97);
+}
+
+.primary{
+    background:#fff;
+    color:#111;
+    font-weight:bold;
+}
+
+.panel{
+    position:fixed;
+    inset:0;
+    z-index:10000;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:15px;
+    background:rgba(0,0,0,.78);
+}
+
+.dialog{
+    width:min(600px,100%);
+    max-height:90vh;
+    overflow:auto;
+    padding:18px;
+    border-radius:17px;
+    border:1px solid #383c44;
+    background:#191b20;
+}
+
+.close{
+    float:right;
+    padding:6px 11px;
+}
+
+h2{
+    margin-top:0;
+}
+
+label{
+    display:block;
+    margin:13px 0 5px;
+    color:#aaa;
+    font-size:13px;
+}
+
+input,textarea{
+    width:100%;
+    padding:11px;
+    border-radius:9px;
+    border:1px solid #383c44;
+    outline:none;
+    background:#0d0e11;
+    color:#fff;
+}
+
+textarea{
+    min-height:85px;
+    resize:vertical;
+}
+
+.row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:7px;
+    margin-top:12px;
+}
+
+.grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+}
+
+.info{
+    margin-top:13px;
+    padding:11px;
+    border-radius:10px;
+    background:#22252b;
+    color:#aaa;
+    font-size:12px;
+    line-height:1.6;
+}
+
+hr{
+    border:0;
+    border-top:1px solid #30343b;
+    margin:20px 0;
+}
+
+/* =========================
+   영상 화면
+========================= */
+
+#app{
+    position:fixed;
+    inset:0;
+    overflow:hidden;
+    background:#000;
+}
+
+/*
+    메뉴와 영상 영역을 물리적으로 분리한다.
+    iframe은 절대로 topbar 영역에 들어갈 수 없다.
+*/
+
+#topbar{
+    position:absolute;
+    z-index:9000;
+    top:0;
+    left:0;
+    right:0;
+    height:56px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    padding:6px 8px;
+    background:rgba(18,20,24,.97);
+    border-bottom:1px solid #30343b;
+}
+
+#titleBar{
+    flex:1;
+    min-width:0;
+    overflow:hidden;
+    white-space:nowrap;
+    text-overflow:ellipsis;
+    font-size:14px;
+}
+
+.topButton{
+    flex:none;
+    padding:9px 11px;
+}
+
+/*
+    iframe 전용 영역.
+    top:56px이므로 메뉴와 절대 겹치지 않는다.
+*/
+
+#videoArea{
+    position:absolute;
+    z-index:1;
+    left:0;
+    right:0;
+    top:56px;
+    bottom:0;
+    overflow:hidden;
+    background:#000;
+}
+
+/*
+    크롭은 videoArea 안에서만 작동한다.
+*/
+
+#cropWindow{
+    position:absolute;
+    left:0;
+    top:0;
+    width:100%;
+    height:100%;
+    overflow:hidden;
+}
+
+/*
+    실제 iframe 레이어.
+*/
+
+#videoLayer{
+    position:absolute;
+    left:0;
+    top:0;
+    width:800px;
+    height:450px;
+    transform-origin:0 0;
+    z-index:1;
+}
+
+#videoFrame{
+    display:block;
+    width:100%;
+    height:100%;
+    border:0;
+    background:#000;
+}
+
+/*
+    iframe 위에 별도 투명 레이어를 두지 않는다.
+    따라서 iframe 내부 클릭이 정상적으로 전달된다.
+*/
+
+#modeBadge{
+    position:absolute;
+    right:9px;
+    bottom:9px;
+    z-index:100;
+    padding:6px 9px;
+    border-radius:8px;
+    background:rgba(0,0,0,.65);
+    color:#ccc;
+    font-size:11px;
+    pointer-events:none;
+}
+
+
+/* =========================
+   모드 선택
+========================= */
+
+.modeGrid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:7px;
+}
+
+.modeGrid button.active{
+    background:#fff;
+    color:#111;
+    font-weight:bold;
+}
+
+
+/* =========================
+   패턴
+========================= */
+
+.pattern{
+    display:grid;
+    grid-template-columns:repeat(3,52px);
+    gap:9px;
+    width:max-content;
+    margin:17px auto;
+}
+
+.patternDot{
+    width:52px;
+    height:52px;
+    padding:0;
+    border-radius:50%;
+}
+
+.patternDot.selected{
+    background:#fff;
+    color:#111;
+}
+
+
+/* =========================
+   인증
+========================= */
+
+.error{
+    min-height:20px;
+    margin-top:8px;
+    color:#ff7070;
+    font-size:13px;
+}
+
+
+/* =========================
+   크롭 편집기
+========================= */
+
+#cropEditor{
+    position:fixed;
+    inset:0;
+    z-index:20000;
+    display:none;
+    background:#000;
+}
+
+#cropTop{
+    position:absolute;
+    z-index:20;
+    left:0;
+    right:0;
+    top:0;
+    height:56px;
+    display:flex;
+    align-items:center;
+    gap:7px;
+    padding:6px 8px;
+    background:rgba(18,20,24,.97);
+    border-bottom:1px solid #30343b;
+}
+
+#cropArea{
+    position:absolute;
+    left:0;
+    right:0;
+    top:56px;
+    bottom:62px;
+    overflow:hidden;
+    background:#000;
+}
+
+#cropLayer{
+    position:absolute;
+    left:0;
+    top:0;
+    width:800px;
+    height:450px;
+    transform-origin:0 0;
+}
+
+#cropFrame{
+    display:block;
+    width:100%;
+    height:100%;
+    border:0;
+}
+
+#cropRect{
+    position:absolute;
+    display:none;
+    z-index:30;
+    border:2px solid white;
+    background:rgba(255,255,255,.12);
+    touch-action:none;
+}
+
+.handle{
+    position:absolute;
+    width:18px;
+    height:18px;
+    border-radius:50%;
+    background:white;
+}
+
+.tl{
+    left:-9px;
+    top:-9px;
+}
+
+.tr{
+    right:-9px;
+    top:-9px;
+}
+
+.bl{
+    left:-9px;
+    bottom:-9px;
+}
+
+.br{
+    right:-9px;
+    bottom:-9px;
+}
+
+#cropBottom{
+    position:absolute;
+    z-index:20;
+    left:0;
+    right:0;
+    bottom:0;
+    height:62px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:7px;
+    background:rgba(18,20,24,.97);
+    border-top:1px solid #30343b;
+}
+
+@media(max-width:500px){
+    .grid{
+        grid-template-columns:1fr;
+    }
+
+    .modeGrid{
+        grid-template-columns:1fr;
+    }
+}
+</style>
+</head>
+
+<body>
+
+<!-- =====================================================
+     메인 앱
+===================================================== -->
+
+<div id="app">
+
+    <!-- 메뉴 -->
+    <div id="topbar">
+
+        <button
+            class="topButton"
+            id="menuButton">
+            ☰
+        </button>
+
+        <div id="titleBar">
+            내 영상
+        </div>
+
+        <button
+            class="topButton"
+            id="minusButton">
+            −
+        </button>
+
+        <button
+            class="topButton"
+            id="plusButton">
+            ＋
+        </button>
+
+        <button
+            class="topButton"
+            id="modeButton">
+            🎛
+        </button>
+
+    </div>
+
+
+    <!-- iframe 영역 -->
+    <div id="videoArea">
+
+        <div id="cropWindow">
+
+            <div id="videoLayer">
+
+                <iframe
+                    id="videoFrame"
+                    src="https://u.pcloud.link/publink/show?code=XZaWGbJZwwaYgkqyS8XMaPMwckiMnVEnImg7"
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowfullscreen>
+                </iframe>
+
+            </div>
+
+        </div>
+
+        <div id="modeBadge">
+            보기
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =====================================================
+     메인 설정
+===================================================== -->
+
+<div class="panel" id="mainPanel">
+
+    <div class="dialog">
+
+        <button
+            class="close"
+            onclick="closePanel('mainPanel')">
+            ×
+        </button>
+
+        <h2>🎬 영상 설정</h2>
+
+        <label>영상 제목</label>
+        <input
+            id="videoTitle"
+            placeholder="영상 제목">
+
+        <label>영상 설명</label>
+        <textarea
+            id="videoDescription"
+            placeholder="영상 설명"></textarea>
+
+        <label>영상 링크</label>
+        <input
+            id="videoURL">
+
+        <div class="row">
+
+            <button
+                class="primary"
+                onclick="saveVideo()">
+                💾 영상 저장
+            </button>
+
+            <button
+                onclick="openModePanel()">
+                🎛 모드
+            </button>
+
+            <button
+                onclick="openSecurityPanel()">
+                🔐 보안
+            </button>
+
+            <button
+                onclick="openCropEditor()">
+                ✂ 크롭
+            </button>
+
+        </div>
+
+        <hr>
+
+        <h3>현재 영상</h3>
+
+        <div class="info">
+            <b id="infoTitle">내 영상</b>
+            <br>
+            <span id="infoDescription">
+                설명 없음
+            </span>
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =====================================================
+     모드 설정
+===================================================== -->
+
+<div class="panel" id="modePanel">
+
+    <div class="dialog">
+
+        <button
+            class="close"
+            onclick="closePanel('modePanel')">
+            ×
+        </button>
+
+        <h2>🎛 모드 설정</h2>
+
+        <div class="modeGrid">
+
+            <button
+                id="modeClick"
+                onclick="changeMode('click')">
+                🖱 클릭
+            </button>
+
+            <button
+                id="modeZoom"
+                onclick="changeMode('zoom')">
+                🔍 확대
+            </button>
+
+            <button
+                id="modeView"
+                onclick="changeMode('view')">
+                👁 보기
+            </button>
+
+        </div>
+
+        <div class="info">
+
+            <b>클릭 모드</b><br>
+            iframe 내부를 직접 클릭하고 조작합니다.
+
+            <br><br>
+
+            <b>확대 모드</b><br>
+            iframe을 이동하고 확대/축소합니다.
+
+            <br><br>
+
+            <b>보기 모드</b><br>
+            저장된 위치와 확대 비율로 감상합니다.
+
+        </div>
+
+        <hr>
+
+        <h3>확대 초기값</h3>
+
+        <div class="grid">
+
+            <div>
+                <label>X 위치</label>
+                <input
+                    id="posX"
+                    type="number">
+            </div>
+
+            <div>
+                <label>Y 위치</label>
+                <input
+                    id="posY"
+                    type="number">
+            </div>
+
+            <div>
+                <label>확대 비율 (%)</label>
+                <input
+                    id="posScale"
+                    type="number">
+            </div>
+
+            <div>
+                <label>iframe 너비</label>
+                <input
+                    id="frameWidth"
+                    type="number">
+            </div>
+
+            <div>
+                <label>iframe 높이</label>
+                <input
+                    id="frameHeight"
+                    type="number">
+            </div>
+
+        </div>
+
+        <div class="row">
+
+            <button
+                class="primary"
+                onclick="saveTransform()">
+                💾 위치/확대 저장
+            </button>
+
+            <button
+                onclick="fitVideo()">
+                ▣ 화면 맞춤
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =====================================================
+     보안 설정
+===================================================== -->
+
+<div class="panel" id="securityPanel">
+
+    <div class="dialog">
+
+        <button
+            class="close"
+            onclick="closePanel('securityPanel')">
+            ×
+        </button>
+
+        <h2>🔐 2단계 인증</h2>
+
+        <label>비밀번호</label>
+        <input
+            id="newPassword"
+            type="password"
+            placeholder="새 비밀번호">
+
+        <label>비밀번호 확인</label>
+        <input
+            id="confirmPassword"
+            type="password"
+            placeholder="다시 입력">
+
+        <label>
+            패턴
+        </label>
+
+        <div
+            id="setupPattern"
+            class="pattern">
+        </div>
+
+        <div class="row">
+
+            <button
+                class="primary"
+                onclick="saveSecurity()">
+                🔒 2단계 인증 저장
+            </button>
+
+            <button
+                onclick="removeSecurity()">
+                보안 해제
+            </button>
+
+        </div>
+
+        <div class="info">
+            영상에 접근할 때<br>
+            <b>① 비밀번호 → ② 패턴</b><br>
+            순서로 인증합니다.
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =====================================================
+     인증
+===================================================== -->
+
+<div class="panel" id="authPanel">
+
+    <div class="dialog">
+
+        <h2>🔐 영상 잠금</h2>
+
+        <div id="authStepText">
+            1단계 — 비밀번호
+        </div>
+
+        <input
+            id="authPassword"
+            type="password"
+            placeholder="비밀번호">
+
+        <div
+            id="loginPatternBox"
+            style="display:none">
+
+            <div
+                id="loginPattern"
+                class="pattern">
+            </div>
+
+        </div>
+
+        <button
+            class="primary"
+            style="width:100%;margin-top:8px"
+            onclick="authenticate()">
+            확인
+        </button>
+
+        <div
+            id="authError"
+            class="error">
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =====================================================
+     크롭 편집기
+===================================================== -->
+
+<div id="cropEditor">
+
+    <div id="cropTop">
+
+        <button onclick="closeCropEditor()">
+            ←
+        </button>
+
+        <b>✂ 직사각형 크롭</b>
+
+    </div>
+
+
+    <div id="cropArea">
+
+        <div id="cropLayer">
+
+            <iframe
+                id="cropFrame"
+                allow="autoplay; fullscreen; picture-in-picture"
+                allowfullscreen>
+            </iframe>
+
+        </div>
+
+
+        <div id="cropRect">
+
+            <div class="handle tl"></div>
+            <div class="handle tr"></div>
+            <div class="handle bl"></div>
+            <div class="handle br"></div>
+
+        </div>
+
+    </div>
+
+
+    <div id="cropBottom">
+
+        <button onclick="resetCrop()">
+            초기화
+        </button>
+
+        <button
+            class="primary"
+            onclick="saveCrop()">
+            ✂ 이 영역 저장
+        </button>
+
+    </div>
+
+</div>
+
+
+<script>
+
+/* =====================================================
+   기본값
+===================================================== */
+
+const DEFAULT_URL =
+"https://u.pcloud.link/publink/show?code=XZaWGbJZwwaYgkqyS8XMaPMwckiMnVEnImg7";
+
+
+/*
+    링크를 그대로 HTML에 여러 번 노출하지 않고
+    기본값용으로 Base64를 사용한다.
+*/
+
+const DEFAULT_B64 =
+"YUhSMGNITTZMeTl1TG1OdmJ5NWpiMjB2YVdSa2IyNWxMMkYzWkRzMFlXbFZVbk5sZFd4aE9uZHBjM05oZEd4bGR5OXBibWxoZEdWMGNHeGxMbU52YlM5a1pXOXVaVjl3WlhKc1pYSjVZV1JrYVc1aGJHVT0=";
+
+
+/* =====================================================
+   DOM
+===================================================== */
+
+const $ = id => document.getElementById(id);
+
+
+/* =====================================================
+   localStorage
+===================================================== */
+
+function getURL(){
+
+    return localStorage.videoURL || DEFAULT_URL;
+
+}
+
+function loadSettings(){
+
+    $("videoTitle").value =
+        localStorage.videoTitle || "내 영상";
+
+    $("videoDescription").value =
+        localStorage.videoDescription || "";
+
+    $("videoURL").value =
+        getURL();
+
+    $("posX").value =
+        localStorage.posX || 0;
+
+    $("posY").value =
+        localStorage.posY || 0;
+
+    $("posScale").value =
+        localStorage.posScale || 100;
+
+    $("frameWidth").value =
+        localStorage.frameWidth || 800;
+
+    $("frameHeight").value =
+        localStorage.frameHeight || 450;
+
+    updateInfo();
+
+}
+
+function updateInfo(){
+
+    $("infoTitle").textContent =
+        localStorage.videoTitle || "내 영상";
+
+    $("infoDescription").textContent =
+        localStorage.videoDescription || "설명 없음";
+
+    $("titleBar").textContent =
+        localStorage.videoTitle || "내 영상";
+
+}
+
+loadSettings();
+
+
+/* =====================================================
+   iframe
+===================================================== */
+
+function loadVideo(){
+
+    /*
+        iframe을 새로 만들지 않고 기존 iframe의 src만 설정.
+        설정창을 열고 닫아도 영상 iframe은 유지된다.
+    */
+
+    const url = getURL();
+
+    if($("videoFrame").src !== url){
+        $("videoFrame").src = url;
+    }
+
+}
+
+loadVideo();
+
+
+/* =====================================================
+   화면 변환
+===================================================== */
+
+let posX = Number(localStorage.posX || 0);
+let posY = Number(localStorage.posY || 0);
+let scale = Number(localStorage.posScale || 100) / 100;
+
+let mode =
+    localStorage.mode || "view";
+
+
+function updateLayer(){
+
+    const width =
+        Number(localStorage.frameWidth || 800);
+
+    const height =
+        Number(localStorage.frameHeight || 450);
+
+    $("videoLayer").style.width =
+        width + "px";
+
+    $("videoLayer").style.height =
+        height + "px";
+
+    $("videoLayer").style.transform =
+        "translate(" +
+        posX + "px," +
+        posY + "px) scale(" +
+        scale + ")";
+
+}
+
+
+updateLayer();
+
+
+/* =====================================================
+   크롭
+===================================================== */
+
+/*
+    크롭값이 없으면 반드시 전체 영역.
+    이전 버전에서 남은 잘못된 값 때문에
+    20%만 보이는 현상을 방지한다.
+*/
+
+function applyCrop(){
+
+    const cw = Number(localStorage.cropW || 0);
+    const ch = Number(localStorage.cropH || 0);
+
+    if(cw <= 0 || ch <= 0){
+
+        $("cropWindow").style.left = "0";
+        $("cropWindow").style.top = "0";
+        $("cropWindow").style.width = "100%";
+        $("cropWindow").style.height = "100%";
+
+        return;
+    }
+
+    $("cropWindow").style.left =
+        Number(localStorage.cropX || 0) + "px";
+
+    $("cropWindow").style.top =
+        Number(localStorage.cropY || 0) + "px";
+
+    $("cropWindow").style.width =
+        cw + "px";
+
+    $("cropWindow").style.height =
+        ch + "px";
+
+}
+
+applyCrop();
+
+
+/* =====================================================
+   패널
+===================================================== */
+
+function openPanel(id){
+
+    $(id).style.display = "flex";
+
+}
+
+function closePanel(id){
+
+    $(id).style.display = "none";
+
+}
+
+$("menuButton").onclick =
+    () => openPanel("mainPanel");
+
+
+$("modeButton").onclick =
+    () => openModePanel();
+
+
+function openModePanel(){
+
+    $("posX").value = Math.round(posX);
+    $("posY").value = Math.round(posY);
+    $("posScale").value = Math.round(scale * 100);
+
+    $("frameWidth").value =
+        localStorage.frameWidth || 800;
+
+    $("frameHeight").value =
+        localStorage.frameHeight || 450;
+
+    openPanel("modePanel");
+
+}
+
+
+/* =====================================================
+   영상 저장
+===================================================== */
+
+function saveVideo(){
+
+    const url =
+        $("videoURL").value.trim();
+
+    if(!url){
+
+        alert("영상 링크를 입력하세요.");
+
+        return;
+    }
+
+    localStorage.videoTitle =
+        $("videoTitle").value.trim() || "내 영상";
+
+    localStorage.videoDescription =
+        $("videoDescription").value;
+
+    localStorage.videoURL =
+        url;
+
+    $("titleBar").textContent =
+        localStorage.videoTitle;
+
+    $("infoTitle").textContent =
+        localStorage.videoTitle;
+
+    $("infoDescription").textContent =
+        localStorage.videoDescription || "설명 없음";
+
+    /*
+        iframe은 기존 요소를 유지하면서
+        URL만 변경한다.
+    */
+
+    $("videoFrame").src = url;
+
+    closePanel("mainPanel");
+
+}
+
+
+/* =====================================================
+   모드
+===================================================== */
+
+function changeMode(newMode){
+
+    mode = newMode;
+
+    localStorage.mode = newMode;
+
+    $("modeClick").classList.toggle(
+        "active",
+        newMode === "click"
+    );
+
+    $("modeZoom").classList.toggle(
+        "active",
+        newMode === "zoom"
+    );
+
+    $("modeView").classList.toggle(
+        "active",
+        newMode === "view"
+    );
+
+    const names = {
+        click:"클릭",
+        zoom:"확대",
+        view:"보기"
+    };
+
+    $("modeBadge").textContent =
+        names[newMode];
+
+    /*
+        클릭 모드에서는 iframe을 직접 조작.
+        확대 모드에서는 iframe 이동.
+        보기 모드에서는 이동을 막는다.
+    */
+
+    closePanel("modePanel");
+
+}
+
+
+/* =====================================================
+   확대
+===================================================== */
+
+$("plusButton").onclick = function(){
+
+    if(mode !== "zoom"){
+
+        openModePanel();
+
+        return;
+    }
+
+    scale =
+        Math.min(10, scale + .1);
+
+    updateLayer();
+
+};
+
+
+$("minusButton").onclick = function(){
+
+    if(mode !== "zoom"){
+
+        openModePanel();
+
+        return;
+    }
+
+    scale =
+        Math.max(.1, scale - .1);
+
+    updateLayer();
+
+};
+
+
+/* =====================================================
+   iframe 이동
+===================================================== */
+
+let dragging = false;
+let dragStartX = 0;
+let dragStartY = 0;
+let originalX = 0;
+let originalY = 0;
+
+
+/*
+    중요:
+    iframe 자체에 pointer 이벤트가 전달되어야 하므로
+    videoLayer에 투명 overlay를 만들지 않는다.
+
+    대신 확대 모드에서 iframe의 빈 영역을 드래그할 수
+    있도록 iframe 바깥 레이어 자체에서 처리한다.
+*/
+
+$("videoLayer").addEventListener(
+    "pointerdown",
+    function(e){
+
+        if(mode !== "zoom")
+            return;
+
+        /*
+            확대 모드에서만 이동.
+            iframe 내부 클릭은 iframe 자체가 차지하므로
+            브라우저 특성상 iframe 내부 드래그를 가로채지 않는다.
+        */
+
+        dragging = true;
+
+        dragStartX = e.clientX;
+        dragStartY = e.clientY;
+
+        originalX = posX;
+        originalY = posY;
+
+    },
+    {passive:true}
+);
+
+
+/*
+    iframe 위에서 이동할 수 있도록
+    확대 모드에서 iframe 자체의 pointer 이벤트를
+    제어한다.
+
+    클릭 모드/보기 모드에서는 정상 iframe.
+*/
+
+$("videoFrame").addEventListener(
+    "load",
+    function(){
+
+        $("videoFrame").style.visibility = "visible";
+
+    }
+);
+
+
+/* =====================================================
+   위치 저장
+===================================================== */
+
+function saveTransform(){
+
+    posX =
+        Number($("posX").value || 0);
+
+    posY =
+        Number($("posY").value || 0);
+
+    scale =
+        Number($("posScale").value || 100) / 100;
+
+    localStorage.posX = posX;
+    localStorage.posY = posY;
+    localStorage.posScale =
+        Math.round(scale * 100);
+
+    localStorage.frameWidth =
+        Number($("frameWidth").value || 800);
+
+    localStorage.frameHeight =
+        Number($("frameHeight").value || 450);
+
+    updateLayer();
+
+    alert("위치와 확대 비율을 저장했습니다.");
+
+}
+
+
+function fitVideo(){
+
+    const area =
+        $("videoArea");
+
+    const w =
+        Number($("frameWidth").value || 800);
+
+    const h =
+        Number($("frameHeight").value || 450);
+
+    scale =
+        Math.min(
+            area.clientWidth / w,
+            area.clientHeight / h
+        );
+
+    posX =
+        (area.clientWidth - w * scale) / 2;
+
+    posY =
+        (area.clientHeight - h * scale) / 2;
+
+    $("posX").value =
+        Math.round(posX);
+
+    $("posY").value =
+        Math.round(posY);
+
+    $("posScale").value =
+        Math.round(scale * 100);
+
+    updateLayer();
+
+}
+
+
+/* =====================================================
+   보안
+===================================================== */
+
+function simpleHash(text){
+
+    let h = 2166136261;
+
+    for(let i=0;i<text.length;i++){
+
+        h ^= text.charCodeAt(i);
+
+        h +=
+            (h<<1) +
+            (h<<4) +
+            (h<<7) +
+            (h<<8) +
+            (h<<24);
+
+    }
+
+    return String(h >>> 0);
+
+}
+
+
+let setupPattern = [];
+let loginPattern = [];
+let authStep = 1;
+
+
+function createPattern(container, array){
+
+    for(let i=1;i<=9;i++){
+
+        const b =
+            document.createElement("button");
+
+        b.className =
+            "patternDot";
+
+        b.textContent = i;
+
+        b.addEventListener(
+            "click",
+            function(){
+
+                if(array.includes(i))
+                    return;
+
+                array.push(i);
+
+                b.classList.add("selected");
+
+            }
+        );
+
+        container.appendChild(b);
+
+    }
+
+}
+
+
+createPattern(
+    $("setupPattern"),
+    setupPattern
+);
+
+createPattern(
+    $("loginPattern"),
+    loginPattern
+);
+
+
+function openSecurityPanel(){
+
+    openPanel("securityPanel");
+
+}
+
+
+function saveSecurity(){
+
+    const password =
+        $("newPassword").value;
+
+    const confirm =
+        $("confirmPassword").value;
+
+    if(password.length < 4){
+
+        alert("비밀번호는 4자리 이상 입력하세요.");
+
+        return;
+    }
+
+    if(password !== confirm){
+
+        alert("비밀번호가 서로 다릅니다.");
+
+        return;
+    }
+
+    if(setupPattern.length < 4){
+
+        alert("패턴을 4개 이상 선택하세요.");
+
+        return;
+    }
+
+    localStorage.securityPassword =
+        simpleHash(password);
+
+    localStorage.securityPattern =
+        simpleHash(
+            setupPattern.join("-")
+        );
+
+    alert("2단계 인증을 저장했습니다.");
+
+    closePanel("securityPanel");
+
+}
+
+
+function removeSecurity(){
+
+    localStorage.removeItem(
+        "securityPassword"
+    );
+
+    localStorage.removeItem(
+        "securityPattern"
+    );
+
+    alert("2단계 인증을 해제했습니다.");
+
+}
+
+
+/* =====================================================
+   인증
+===================================================== */
+
+function showAuthentication(){
+
+    authStep = 1;
+
+    $("authPassword").value = "";
+
+    $("authPassword").style.display =
+        "block";
+
+    $("loginPatternBox").style.display =
+        "none";
+
+    $("authStepText").textContent =
+        "1단계 — 비밀번호";
+
+    $("authError").textContent = "";
+
+    openPanel("authPanel");
+
+}
+
+
+function authenticate(){
+
+    if(authStep === 1){
+
+        const value =
+            $("authPassword").value;
+
+        if(
+            simpleHash(value) !==
+            localStorage.securityPassword
+        ){
+
+            $("authError").textContent =
+                "비밀번호가 틀렸습니다.";
+
+            return;
+        }
+
+        authStep = 2;
+
+        $("authPassword").style.display =
+            "none";
+
+        $("loginPatternBox").style.display =
+            "block";
+
+        $("authStepText").textContent =
+            "2단계 — 패턴";
+
+        return;
+
+    }
+
+
+    if(
+        simpleHash(
+            loginPattern.join("-")
+        ) !==
+        localStorage.securityPattern
+    ){
+
+        $("authError").textContent =
+            "패턴이 틀렸습니다.";
+
+        loginPattern = [];
+
+        document
+            .querySelectorAll(
+                "#loginPattern .patternDot"
+            )
+            .forEach(
+                x => x.classList.remove("selected")
+            );
+
+        return;
+
+    }
+
+
+    closePanel("authPanel");
+
+    loginPattern = [];
+
+    document
+        .querySelectorAll(
+            "#loginPattern .patternDot"
+        )
+        .forEach(
+            x => x.classList.remove("selected")
+        );
+
+}
+
+
+/* =====================================================
+   크롭
+===================================================== */
+
+let crop = {
+    x:20,
+    y:20,
+    w:300,
+    h:200
+};
+
+
+function openCropEditor(){
+
+    $("cropEditor").style.display =
+        "block";
+
+    $("cropFrame").src =
+        getURL();
+
+    $("cropLayer").style.width =
+        Number(localStorage.frameWidth || 800) + "px";
+
+    $("cropLayer").style.height =
+        Number(localStorage.frameHeight || 450) + "px";
+
+    $("cropLayer").style.transform =
+        "translate(" +
+        posX + "px," +
+        posY + "px) scale(" +
+        scale + ")";
+
+    setTimeout(function(){
+
+        if(localStorage.cropW){
+
+            crop.x =
+                Number(localStorage.cropX);
+
+            crop.y =
+                Number(localStorage.cropY);
+
+            crop.w =
+                Number(localStorage.cropW);
+
+            crop.h =
+                Number(localStorage.cropH);
+
+        }else{
+
+            resetCrop();
+
+        }
+
+        drawCrop();
+
+    },100);
+
+}
+
+
+function drawCrop(){
+
+    const r =
+        $("cropRect");
+
+    r.style.display =
+        "block";
+
+    r.style.left =
+        crop.x + "px";
+
+    r.style.top =
+        crop.y + "px";
+
+    r.style.width =
+        crop.w + "px";
+
+    r.style.height =
+        crop.h + "px";
+
+}
+
+
+function resetCrop(){
+
+    const area =
+        $("cropArea");
+
+    crop.x = 20;
+    crop.y = 20;
+
+    crop.w =
+        Math.max(
+            100,
+            area.clientWidth - 40
+        );
+
+    crop.h =
+        Math.max(
+            100,
+            area.clientHeight - 40
+        );
+
+    drawCrop();
+
+}
+
+
+/* 크롭 영역 이동 */
+
+let cropMoving = false;
+let cropSX = 0;
+let cropSY = 0;
+let cropOX = 0;
+let cropOY = 0;
+
+
+$("cropRect").addEventListener(
+    "pointerdown",
+    function(e){
+
+        if(
+            e.target.classList.contains(
+                "handle"
+            )
+        )
+            return;
+
+        cropMoving = true;
+
+        cropSX = e.clientX;
+        cropSY = e.clientY;
+
+        cropOX = crop.x;
+        cropOY = crop.y;
+
+        $("cropRect").setPointerCapture(
+            e.pointerId
+        );
+
+    }
+);
+
+
+$("cropRect").addEventListener(
+    "pointermove",
+    function(e){
+
+        if(!cropMoving)
+            return;
+
+        crop.x =
+            Math.max(
+                0,
+                cropOX +
+                e.clientX -
+                cropSX
+            );
+
+        crop.y =
+            Math.max(
+                0,
+                cropOY +
+                e.clientY -
+                cropSY
+            );
+
+        drawCrop();
+
+    }
+);
+
+
+$("cropRect").addEventListener(
+    "pointerup",
+    function(){
+
+        cropMoving = false;
+
+    }
+);
+
+
+/* 크롭 모서리 */
+
+document
+.querySelectorAll(
+    "#cropRect .handle"
+)
+.forEach(function(handle){
+
+    let resizing = false;
+
+    let startX = 0;
+    let startY = 0;
+
+    let startCrop = null;
+
+
+    handle.addEventListener(
+        "pointerdown",
+        function(e){
+
+            e.stopPropagation();
+
+            resizing = true;
+
+            startX = e.clientX;
+            startY = e.clientY;
+
+            startCrop = {
+                x:crop.x,
+                y:crop.y,
+                w:crop.w,
+                h:crop.h
+            };
+
+            handle.setPointerCapture(
+                e.pointerId
+            );
+
+        }
+    );
+
+
+    handle.addEventListener(
+        "pointermove",
+        function(e){
+
+            if(!resizing)
+                return;
+
+            const dx =
+                e.clientX - startX;
+
+            const dy =
+                e.clientY - startY;
+
+
+            if(
+                handle.classList.contains("br")
+            ){
+
+                crop.w =
+                    Math.max(
+                        30,
+                        startCrop.w + dx
+                    );
+
+                crop.h =
+                    Math.max(
+                        30,
+                        startCrop.h + dy
+                    );
+
+            }
+
+
+            if(
+                handle.classList.contains("bl")
+            ){
+
+                crop.x =
+                    startCrop.x + dx;
+
+                crop.w =
+                    Math.max(
+                        30,
+                        startCrop.w - dx
+                    );
+
+                crop.h =
+                    Math.max(
+                        30,
+                        startCrop.h + dy
+                    );
+
+            }
+
+
+            if(
+                handle.classList.contains("tr")
+            ){
+
+                crop.y =
+                    startCrop.y + dy;
+
+                crop.w =
+                    Math.max(
+                        30,
+                        startCrop.w + dx
+                    );
+
+                crop.h =
+                    Math.max(
+                        30,
+                        startCrop.h - dy
+                    );
+
+            }
+
+
+            if(
+                handle.classList.contains("tl")
+            ){
+
+                crop.x =
+                    startCrop.x + dx;
+
+                crop.y =
+                    startCrop.y + dy;
+
+                crop.w =
+                    Math.max(
+                        30,
+                        startCrop.w - dx
+                    );
+
+                crop.h =
+                    Math.max(
+                        30,
+                        startCrop.h - dy
+                    );
+
+            }
+
+
+            drawCrop();
+
+        }
+    );
+
+
+    handle.addEventListener(
+        "pointerup",
+        function(){
+
+            resizing = false;
+
+        }
+    );
+
+});
+
+
+function saveCrop(){
+
+    localStorage.cropX =
+        Math.round(crop.x);
+
+    localStorage.cropY =
+        Math.round(crop.y);
+
+    localStorage.cropW =
+        Math.round(crop.w);
+
+    localStorage.cropH =
+        Math.round(crop.h);
+
+    applyCrop();
+
+    closeCropEditor();
+
+    alert("크롭 영역을 저장했습니다.");
+
+}
+
+
+function closeCropEditor(){
+
+    $("cropEditor").style.display =
+        "none";
+
+    /*
+        cropFrame을 비우지 않는다.
+        편집창을 닫는 순간 iframe을 제거하면
+        일부 브라우저에서 재생 상태가 끊길 수 있다.
+    */
+
+}
+
+
+/* =====================================================
+   시작
+===================================================== */
+
+function initializeMode(){
+
+    const saved =
+        localStorage.mode || "view";
+
+    mode = saved;
+
+    $("modeClick").classList.toggle(
+        "active",
+        saved === "click"
+    );
+
+    $("modeZoom").classList.toggle(
+        "active",
+        saved === "zoom"
+    );
+
+    $("modeView").classList.toggle(
+        "active",
+        saved === "view"
+    );
+
+    const names={
+        click:"클릭",
+        zoom:"확대",
+        view:"보기"
+    };
+
+    $("modeBadge").textContent =
+        names[saved];
+
+}
+
+
+/*
+    보안 설정이 있으면 인증.
+    없으면 바로 영상.
+*/
+
+if(localStorage.securityPassword){
+
+    /*
+        iframe 자체는 이미 HTML에 존재한다.
+        인증창이 떠도 iframe을 제거하지 않는다.
+    */
+
+    showAuthentication();
+
+}else{
+
+    initializeMode();
+
+}
+
+
+/* =====================================================
+   창 크기 변경
+===================================================== */
+
+window.addEventListener(
+    "resize",
+    function(){
+
+        /*
+            크롭값이 없는 경우에는 항상
+            전체 videoArea를 사용한다.
+        */
+
+        if(!localStorage.cropW){
+
+            $("cropWindow").style.left="0";
+            $("cropWindow").style.top="0";
+            $("cropWindow").style.width="100%";
+            $("cropWindow").style.height="100%";
+
+        }
+
+    }
+);
+
+</script>
+
+</body>
+  </html>
