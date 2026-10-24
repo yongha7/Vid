@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Solo Video</title>
+<style>
+:root {
+  --bg:#101114;
+  --panel:#1c1d22;
+  --text:#f5f5f7;
+  --accent:#7c83ff;
+  --muted:#9698a5;
+}
+* { box-sizing:border-box; }
+body {
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:system-ui,-apple-system,sans-serif;
+  overflow:hidden;
+}
+button,input,textarea { font:inherit; }
+button {
+  border:0;
+  border-radius:12px;
+  padding:12px 15px;
+  background:#30313a;
+  color:white;
+  cursor:pointer;
+  touch-action:manipulation;
+}
+button:active { opacity:.7; }
+.primary { background:var(--accent); color:white; }
+header {
+  height:58px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 12px;
+  background:#18191e;
+  border-bottom:1px solid #292a31;
+}
+header strong { font-size:17px; }
+.icon {
+  width:44px;
+  height:44px;
+  padding:0;
+  font-size:23px;
+  background:transparent;
+}
+#main {
+  height:calc(100dvh - 58px);
+  display:flex;
+  flex-direction:column;
+}
+#videoInfo { padding:12px 15px 8px; }
+#videoTitle { font-size:17px; font-weight:700; }
+#videoDesc {
+  color:var(--muted);
+  font-size:13px;
+  margin-top:4px;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+#stage {
+  position:relative;
+  flex:1;
+  min-height:0;
+  margin:8px;
+  overflow:hidden;
+  background:#050506;
+  border-radius:14px;
+  border:1px solid #30313a;
+  touch-action:none;
+}
+#frameBox {
+  position:absolute;
+  width:100%;
+  height:100%;
+  left:0;
+  top:0;
+  transform-origin:top left;
+}
+#player {
+  width:100%;
+  height:100%;
+  border:0;
+  display:block;
+  background:#050506;
+}
+#interaction {
+  position:absolute;
+  inset:0;
+  z-index:3;
+  background:transparent;
+  touch-action:none;
+}
+#stage.click-mode #interaction { pointer-events:none; }
+#stage.zoom-mode #interaction,
+#stage.view-mode #interaction,
+#stage.crop-mode #interaction { pointer-events:auto; }
+#cropBox {
+  position:absolute;
+  display:none;
+  border:2px dashed #a5aaff;
+  background:#7c83ff22;
+  z-index:5;
+  pointer-events:none;
+}
+#modeBar {
+  display:flex;
+  gap:7px;
+  padding:8px 10px 12px;
+}
+#modeBar button { flex:1; padding:11px 3px; font-size:13px; }
+#modeBar button.active { background:var(--accent); }
+#zoomControls {
+  display:none;
+  gap:8px;
+  padding:0 10px 8px;
+}
+#zoomControls button { flex:1; }
+#status {
+  color:var(--muted);
+  text-align:center;
+  font-size:12px;
+  padding:0 8px 8px;
+}
+.overlay {
+  position:fixed;
+  inset:0;
+  z-index:20;
+  display:none;
+  align-items:flex-end;
+  justify-content:center;
+  background:#0009;
+}
+.overlay.open { display:flex; }
+.sheet {
+  width:100%;
+  max-width:520px;
+  max-height:88dvh;
+  overflow:auto;
+  background:var(--panel);
+  border-radius:22px 22px 0 0;
+  padding:20px;
+  padding-bottom:calc(20px + env(safe-area-inset-bottom));
+}
+.sheet h2 { margin:0 0 18px; font-size:20px; }
+.sheet label {
+  display:block;
+  margin:14px 0 7px;
+  font-size:13px;
+  color:#c7c8d2;
+}
+.sheet input,.sheet textarea {
+  width:100%;
+  padding:12px;
+  border-radius:10px;
+  border:1px solid #40414b;
+  background:#111216;
+  color:white;
+  outline:none;
+}
+.sheet textarea { min-height:80px; resize:vertical; }
+.row { display:flex; gap:8px; margin-top:12px; }
+.row > * { flex:1; }
+.menuGrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.menuGrid button { min-height:62px; }
+.note { color:var(--muted); font-size:12px; line-height:1.5; }
+#patternCanvas {
+  display:block;
+  width:min(280px,85vw);
+  height:min(280px,85vw);
+  margin:10px auto;
+  background:#111216;
+  border-radius:16px;
+  touch-action:none;
+}
+#authScreen {
+  position:fixed;
+  inset:0;
+  z-index:100;
+  background:var(--bg);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+}
+#authScreen.show { display:flex; }
+.authBox { width:100%; max-width:360px; text-align:center; }
+.authBox input {
+  width:100%;
+  margin:10px 0;
+  padding:14px;
+  border:1px solid #444;
+  border-radius:10px;
+  background:#1c1d22;
+  color:white;
+}
+#authMessage { color:#ff8585; min-height:24px; font-size:13px; }
+.hidden { display:none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <strong>▶ Solo Video</strong>
+  <button class="icon" id="menuBtn" aria-label="메뉴">☰</button>
+</header>
+
+<main id="main">
+  <section id="videoInfo">
+    <div id="videoTitle">나의 영상</div>
+    <div id="videoDesc">영상 설명을 설정할 수 있습니다.</div>
+  </section>
+
+  <section id="stage" class="click-mode">
+    <div id="frameBox">
+      <iframe id="player"
+        title="영상 플레이어"
+        allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
+        allowfullscreen
+        referrerpolicy="strict-origin-when-cross-origin">
+      </iframe>
+    </div>
+    <div id="interaction"></div>
+    <div id="cropBox"></div>
+  </section>
+
+  <div id="zoomControls">
+    <button id="zoomOut">− 축소</button>
+    <button id="zoomReset">위치 초기화</button>
+    <button id="zoomIn">＋ 확대</button>
+  </div>
+
+  <div id="modeBar">
+    <button data-mode="click" class="active">👆 클릭</button>
+    <button data-mode="zoom">🔎 확대</button>
+    <button data-mode="view">👁 보기</button>
+    <button data-mode="crop">▧ 자르기</button>
+  </div>
+  <div id="status">클릭 모드 · 영상과 상호작용할 수 있습니다.</div>
+</main>
+
+<!-- 메뉴 -->
+<div class="overlay" id="menuOverlay">
+  <section class="sheet">
+    <h2>메뉴</h2>
+    <div class="menuGrid">
+      <button id="openVideo">🎬 영상 설정</button>
+      <button id="openDisplay">🖥 화면 설정</button>
+      <button id="openSecurity">🔐 보안 설정</button>
+      <button id="savePosition">📌 현재 위치 저장</button>
+      <button id="restorePosition">↩ 초기 위치 복원</button>
+      <button id="resetCrop">▧ 자르기 해제</button>
+    </div>
+    <div class="row">
+      <button id="closeMenu" class="primary">닫기</button>
+    </div>
+  </section>
+</div>
+
+<!-- 영상 설정 -->
+<div class="overlay" id="videoOverlay">
+  <section class="sheet">
+    <h2>영상 설정</h2>
+    <label for="urlInput">영상 주소 또는 임베드 주소</label>
+    <input id="urlInput" type="url" placeholder="https://example.com/video">
+    <label for="titleInput">제목</label>
+    <input id="titleInput" maxlength="100" placeholder="영상 제목">
+    <label for="descInput">설명</label>
+    <textarea id="descInput" maxlength="1000" placeholder="영상 설명"></textarea>
+    <p class="note">일부 사이트는 iframe 재생을 차단합니다. 주소가 정상이어도 사이트의 임베드 정책에 따라 재생되지 않을 수 있습니다.</p>
+    <div class="row">
+      <button data-close="videoOverlay">취소</button>
+      <button id="applyVideo" class="primary">저장 및 열기</button>
+    </div>
+  </section>
+</div>
+
+<!-- 화면 설정 -->
+<div class="overlay" id="displayOverlay">
+  <section class="sheet">
+    <h2>화면 설정</h2>
+    <label for="scaleInput">확대 비율</label>
+    <input id="scaleInput" type="range" min="0.5" max="3" step="0.05" value="1">
+    <div id="scaleLabel">100%</div>
+    <label for="xInput">가로 위치</label>
+    <input id="xInput" type="range" min="-1000" max="1000" value="0">
+    <label for="yInput">세로 위치</label>
+    <input id="yInput" type="range" min="-1000" max="1000" value="0">
+    <div class="row">
+      <button id="resetTransform">초기화</button>
+      <button id="saveDisplay" class="primary">저장</button>
+    </div>
+    <div class="row">
+      <button data-close="displayOverlay">닫기</button>
+    </div>
+  </section>
+</div>
+
+<!-- 보안 설정 -->
+<div class="overlay" id="securityOverlay">
+  <section class="sheet">
+    <h2>보안 설정</h2>
+    <p class="note">비밀번호와 패턴을 모두 설정하면 두 단계 인증을 사용합니다. 비밀번호만 설정하거나 패턴만 설정할 수도 있습니다.</p>
+    <label for="passwordInput">새 비밀번호 (비우면 해제)</label>
+    <input id="passwordInput" type="password" autocomplete="new-password" placeholder="비밀번호">
+    <label for="patternToggle">패턴 인증</label>
+    <button id="patternToggle" class="primary" style="width:100%">패턴 설정하기</button>
+    <div id="patternStatus" class="note" style="margin-top:8px">패턴 미설정</div>
+    <div class="row">
+      <button data-close="securityOverlay">취소</button>
+      <button id="saveSecurity" class="primary">보안 저장</button>
+    </div>
+  </section>
+</div>
+
+<!-- 패턴 설정 -->
+<div class="overlay" id="patternOverlay">
+  <section class="sheet">
+    <h2>패턴 설정</h2>
+    <p class="note">점 9개 중 4개 이상을 순서대로 연결하세요.</p>
+    <canvas id="patternCanvas" width="280" height="280"></canvas>
+    <div id="patternMessage" class="note" style="text-align:center">첫 패턴을 그려 주세요.</div>
+    <div class="row">
+      <button id="clearPattern">다시 그리기</button>
+      <button id="finishPattern" class="primary">패턴 저장</button>
+    </div>
+    <div class="row">
+      <button data-close="patternOverlay">취소</button>
+    </div>
+  </section>
+</div>
+
+<!-- 인증 화면 -->
+<div id="authScreen">
+  <div class="authBox">
+    <h2>🔐 잠금 해제</h2>
+    <p class="note">설정한 인증 정보를 입력하세요.</p>
+    <div id="authPasswordArea">
+      <input id="authPassword" type="password" placeholder="비밀번호" autocomplete="current-password">
+    </div>
+    <div id="authPatternArea" class="hidden">
+      <p>패턴을 그려 주세요.</p>
+      <canvas id="authPatternCanvas" width="280" height="280" style="width:min(280px,85vw);height:min(280px,85vw);background:#1c1d22;border-radius:16px;touch-action:none"></canvas>
+    </div>
+    <div id="authMessage"></div>
+    <button id="authSubmit" class="primary" style="width:100%">확인</button>
+  </div>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+const $ = id => document.getElementById(id);
+const STORAGE_KEY = "solo_video_app_v1";
+
+const defaultData = {
+  url: "https://u.pcloud.link/publink/show?code=XZaWGbJZwwaYgkqyS8XMaPMwckiMnVEnImg7",
+  title: "나의 영상",
+  desc: "",
+  x: 0,
+  y: 0,
+  scale: 1,
+  savedX: 0,
+  savedY: 0,
+  savedScale: 1,
+  crop: null,
+  passwordHash: "",
+  pattern: []
+};
+
+let data = {...defaultData};
+let mode = "click";
+let pendingPattern = [];
+let firstPattern = [];
+let drawingPattern = false;
+let currentPattern = [];
+let authStage = 0;
+let touchStart = null;
+let dragStart = null;
+let cropStart = null;
+
+try {
+  const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+  if (saved && typeof saved === "object") {
+    data = {...defaultData, ...saved};
+  }
+} catch (e) {}
+
+function saveData() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    alert("저장에 실패했습니다. 브라우저 저장 공간을 확인해 주세요.");
+  }
+}
+
+function openOverlay(id) {
+  $(id).classList.add("open");
+}
+function closeOverlay(id) {
+  $(id).classList.remove("open");
+}
+document.querySelectorAll("[data-close]").forEach(btn => {
+  btn.addEventListener("click", () => closeOverlay(btn.dataset.close));
+});
+document.querySelectorAll(".overlay").forEach(overlay => {
+  overlay.addEventListener("click", e => {
+    if (e.target === overlay) overlay.classList.remove("open");
+  });
+});
+
+function safeURL(value) {
+  try {
+    const u = new URL(value.trim());
+    if (!["http:", "https:"].includes(u.protocol)) return "";
+    return u.href;
+  } catch {
+    return "";
+  }
+}
+
+function renderVideo() {
+  $("videoTitle").textContent = data.title || "나의 영상";
+  $("videoDesc").textContent = data.desc || "";
+  $("urlInput").value = data.url || "";
+  $("titleInput").value = data.title || "";
+  $("descInput").value = data.desc || "";
+
+  const player = $("player");
+  const nextURL = safeURL(data.url || "");
+  if (nextURL && player.src !== nextURL) {
+    player.src = nextURL;
+  }
+  renderTransform();
+  renderCrop();
+}
+
+function renderTransform() {
+  $("frameBox").style.transform =
+    `translate(${data.x}px,${data.y}px) scale(${data.scale})`;
+
+  $("scaleInput").value = data.scale;
+  $("scaleLabel").textContent = Math.round(data.scale * 100) + "%";
+  $("xInput").value = data.x;
+  $("yInput").value = data.y;
+}
+
+function setMode(next) {
+  mode = next;
+  $("stage").className = next + "-mode";
+  document.querySelectorAll("[data-mode]").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.mode === next);
+  });
+  $("zoomControls").style.display = next === "zoom" ? "flex" : "none";
+
+  const descriptions = {
+    click: "클릭 모드 · 영상과 상호작용할 수 있습니다.",
+    zoom: "확대 모드 · 드래그로 이동하고 버튼으로 확대할 수 있습니다.",
+    view: "보기 모드 · 영상 조작을 잠급니다.",
+    crop: "자르기 모드 · 드래그하여 사각형 영역을 지정합니다."
+  };
+  $("status").textContent = descriptions[next];
+  $("interaction").style.pointerEvents =
+    next === "click" ? "none" : "auto";
+  $("cropBox").style.display =
+    data.crop && next !== "crop" ? "block" : "none";
+  renderCrop();
+}
+
+document.querySelectorAll("[data-mode]").forEach(btn => {
+  btn.addEventListener("click", () => setMode(btn.dataset.mode));
+});
+
+$("menuBtn").addEventListener("click", () => openOverlay("menuOverlay"));
+$("closeMenu").addEventListener("click", () => closeOverlay("menuOverlay"));
+
+$("openVideo").addEventListener("click", () => {
+  closeOverlay("menuOverlay");
+  renderVideo();
+  openOverlay("videoOverlay");
+});
+
+$("openDisplay").addEventListener("click", () => {
+  closeOverlay("menuOverlay");
+  renderTransform();
+  openOverlay("displayOverlay");
+});
+
+$("openSecurity").addEventListener("click", () => {
+  closeOverlay("menuOverlay");
+  $("passwordInput").value = "";
+  updatePatternStatus();
+  openOverlay("securityOverlay");
+});
+
+$("applyVideo").addEventListener("click", () => {
+  const url = safeURL($("urlInput").value);
+  if (!url) {
+    alert("올바른 http 또는 https 주소를 입력해 주세요.");
+    return;
+  }
+  data.url = url;
+  data.title = $("titleInput").value.trim() || "나의 영상";
+  data.desc = $("descInput").value.trim();
+  saveData();
+  renderVideo();
+  closeOverlay("videoOverlay");
+});
+
+$("savePosition").addEventListener("click", () => {
+  data.savedX = data.x;
+  data.savedY = data.y;
+  data.savedScale = data.scale;
+  saveData();
+  closeOverlay("menuOverlay");
+  alert("현재 위치와 확대 비율을 저장했습니다.");
+});
+
+$("restorePosition").addEventListener("click", () => {
+  data.x = data.savedX;
+  data.y = data.savedY;
+  data.scale = data.savedScale;
+  saveData();
+  renderTransform();
+  closeOverlay("menuOverlay");
+});
+
+$("resetTransform").addEventListener("click", () => {
+  data.x = 0;
+  data.y = 0;
+  data.scale = 1;
+  renderTransform();
+});
+
+$("saveDisplay").addEventListener("click", () => {
+  data.x = Number($("xInput").value);
+  data.y = Number($("yInput").value);
+  data.scale = Number($("scaleInput").value);
+  saveData();
+  renderTransform();
+  closeOverlay("displayOverlay");
+});
+
+$("scaleInput").addEventListener("input", () => {
+  data.scale = Number($("scaleInput").value);
+  renderTransform();
+});
+$("xInput").addEventListener("input", () => {
+  data.x = Number($("xInput").value);
+  renderTransform();
+});
+$("yInput").addEventListener("input", () => {
+  data.y = Number($("yInput").value);
+  renderTransform();
+});
+
+$("zoomIn").addEventListener("click", () => {
+  data.scale = Math.min(3, data.scale + 0.1);
+  renderTransform();
+});
+$("zoomOut").addEventListener("click", () => {
+  data.scale = Math.max(0.5, data.scale - 0.1);
+  renderTransform();
+});
+$("zoomReset").addEventListener("click", () => {
+  data.x = 0;
+  data.y = 0;
+  data.scale = 1;
+  renderTransform();
+});
+
+const stage = $("stage");
+const interaction = $("interaction");
+
+function pointerPos(e) {
+  const r = stage.getBoundingClientRect();
+  return {x: e.clientX - r.left, y: e.clientY - r.top};
+}
+
+interaction.addEventListener("pointerdown", e => {
+  if (mode === "view") return;
+  e.preventDefault();
+  interaction.setPointerCapture(e.pointerId);
+
+  const p = pointerPos(e);
+
+  if (mode === "zoom") {
+    dragStart = {
+      px: p.x, py: p.y,
+      x: data.x, y: data.y
+    };
+  } else if (mode === "crop") {
+    cropStart = p;
+    $("cropBox").style.display = "block";
+    $("cropBox").style.left = p.x + "px";
+    $("cropBox").style.top = p.y + "px";
+    $("cropBox").style.width = "0px";
+    $("cropBox").style.height = "0px";
+    data.crop = null;
+  }
+});
+
+interaction.addEventListener("pointermove", e => {
+  const p = pointerPos(e);
+
+  if (mode === "zoom" && dragStart &&
+      interaction.hasPointerCapture(e.pointerId)) {
+    data.x = dragStart.x + p.x - dragStart.px;
+    data.y = dragStart.y + p.y - dragStart.py;
+    renderTransform();
+  }
+
+  if (mode === "crop" && cropStart &&
+      interaction.hasPointerCapture(e.pointerId)) {
+    const left = Math.min(cropStart.x, p.x);
+    const top = Math.min(cropStart.y, p.y);
+    const width = Math.abs(p.x - cropStart.x);
+    const height = Math.abs(p.y - cropStart.y);
+
+    Object.assign($("cropBox").style, {
+      left: left + "px",
+      top: top + "px",
+      width: width + "px",
+      height: height + "px"
+    });
+    data.crop = {left, top, width, height};
+  }
+});
+
+function finishPointer() {
+  if (mode === "zoom" && dragStart) {
+    dragStart = null;
+    saveData();
+  }
+  if (mode === "crop" && cropStart) {
+    cropStart = null;
+    if (data.crop && (data.crop.width < 10 || data.crop.height < 10)) {
+      data.crop = null;
+      renderCrop();
+    } else {
+      saveData();
+      $("status").textContent =
+        "자르기 영역을 지정했습니다. 메뉴에서 '자르기 해제'로 복원할 수 있습니다.";
+    }
+  }
+}
+interaction.addEventListener("pointerup", finishPointer);
+interaction.addEventListener("pointercancel", finishPointer);
+
+function renderCrop() {
+  const box = $("cropBox");
+  if (!data.crop) {
+    box.style.display = "none";
+    return;
+  }
+  const c = data.crop;
+  Object.assign(box.style, {
+    display: mode === "crop" ? "block" : "none",
+    left: c.left + "px",
+    top: c.top + "px",
+    width: c.width + "px",
+    height: c.height + "px"
+  });
+}
+
+$("resetCrop").addEventListener("click", () => {
+  data.crop = null;
+  saveData();
+  renderCrop();
+  closeOverlay("menuOverlay");
+  setMode("click");
+});
+
+async function hashPassword(password) {
+  const bytes = new TextEncoder().encode(password);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function updatePatternStatus() {
+  $("patternStatus").textContent = data.pattern.length
+    ? "패턴이 설정되어 있습니다."
+    : "패턴 미설정";
+}
+
+$("patternToggle").addEventListener("click", () => {
+  firstPattern = [];
+  pendingPattern = [];
+  clearPatternCanvas($("patternCanvas"));
+  $("patternMessage").textContent = "첫 패턴을 그려 주세요.";
+  closeOverlay("securityOverlay");
+  openOverlay("patternOverlay");
+});
+
+$("clearPattern").addEventListener("click", () => {
+  pendingPattern = [];
+  firstPattern = [];
+  clearPatternCanvas($("patternCanvas"));
+  $("patternMessage").textContent = "다시 그려 주세요.";
+});
+
+$("finishPattern").addEventListener("click", () => {
+  if (pendingPattern.length < 4) {
+    $("patternMessage").textContent = "최소 4개 점을 연결해 주세요.";
+    return;
+  }
+  if (!firstPattern.length) {
+    firstPattern = [...pendingPattern];
+    pendingPattern = [];
+    clearPatternCanvas($("patternCanvas"));
+    $("patternMessage").textContent = "확인을 위해 같은 패턴을 한 번 더 그려 주세요.";
+    return;
+  }
+  if (firstPattern.join(",") !== pendingPattern.join(",")) {
+    firstPattern = [];
+    pendingPattern = [];
+    clearPatternCanvas($("patternCanvas"));
+    $("patternMessage").textContent = "패턴이 일치하지 않습니다. 처음부터 다시 해 주세요.";
+    return;
+  }
+  data.pattern = [...pendingPattern];
+  pendingPattern = [];
+  firstPattern = [];
+  closeOverlay("patternOverlay");
+  openOverlay("securityOverlay");
+  updatePatternStatus();
+});
+
+$("saveSecurity").addEventListener("click", async () => {
+  const password = $("passwordInput").value;
+  if (password) {
+    data.passwordHash = await hashPassword(password);
+  } else if (data.passwordHash && !confirm("비밀번호를 해제할까요?")) {
+    return;
+  } else {
+    data.passwordHash = "";
+  }
+  saveData();
+  closeOverlay("securityOverlay");
+  $("passwordInput").value = "";
+  alert("보안 설정을 저장했습니다.");
+});
+
+function clearPatternCanvas(canvas) {
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#111216";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.lineWidth = 2;
+  const points = patternPoints(canvas);
+  points.forEach((p, i) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+    ctx.fillStyle = "#777b91";
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = "11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(i + 1), p.x, p.y);
+  });
+}
+
+function patternPoints(canvas) {
+  const pad = canvas.width * 0.18;
+  const step = (canvas.width - pad * 2) / 2;
+  const points = [];
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 3; col++) {
+      points.push({x: pad + col * step, y: pad + row * step});
+    }
+  }
+  return points;
+}
+
+function setupPatternCanvas(canvas, onFinish) {
+  let drawing = false;
+  let selected = [];
+  const ctx = canvas.getContext("2d");
+
+  function getPos(e) {
+    const r = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - r.left) * canvas.width / r.width,
+      y: (e.clientY - r.top) * canvas.height / r.height
+    };
+  }
+
+  function nearest(pos) {
+    const points = patternPoints(canvas);
+    let best = -1;
+    let dist = Infinity;
+    points.forEach((p, i) => {
+      const d = Math.hypot(pos.x - p.x, pos.y - p.y);
+      if (d < dist) { dist = d; best = i; }
+    });
+    return dist < canvas.width * 0.13 ? best : -1;
+  }
+
+  function redraw() {
+    clearPatternCanvas(canvas);
+    const pts = patternPoints(canvas);
+    if (selected.length) {
+      ctx.beginPath();
+      selected.forEach((id, i) => {
+        const p = pts[id];
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.strokeStyle = "#9298ff";
+      ctx.lineWidth = 6;
+      ctx.lineCap = "round";
+      ctx.stroke();
+      selected.forEach(id => {
+        const p = pts[id];
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
+        ctx.fillStyle = "#9298ff";
+        ctx.fill();
+      });
+    }
+  }
+
+  canvas.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    drawing = true;
+    selected = [];
+    canvas.setPointerCapture(e.pointerId);
+    const id = nearest(getPos(e));
+    if (id >= 0) selected.push(id);
+    redraw();
+  });
+
+  canvas.addEventListener("pointermove", e => {
+    if (!drawing) return;
+    e.preventDefault();
+    const id = nearest(getPos(e));
+    if (id >= 0 && !selected.includes(id)) selected.push(id);
+    redraw();
+  });
+
+  function finish() {
+    if (!drawing) return;
+    drawing = false;
+    onFinish([...selected]);
+  }
+  canvas.addEventListener("pointerup", finish);
+  canvas.addEventListener("pointercancel", finish);
+}
+
+setupPatternCanvas($("patternCanvas"), pattern => {
+  pendingPattern = pattern;
+  $("patternMessage").textContent =
+    pattern.length >= 4
+      ? `${pattern.length}개 점 선택 · '패턴 저장'을 눌러 주세요.`
+      : "최소 4개 점을 연결해 주세요.";
+});
+
+let authPattern = [];
+setupPatternCanvas($("authPatternCanvas"), pattern => {
+  authPattern = pattern;
+  $("authMessage").textContent = pattern.length
+    ? "패턴 입력 완료. 확인을 누르세요."
+    : "패턴을 다시 그려 주세요.";
+});
+
+async function beginAuthIfNeeded() {
+  if (!data.passwordHash && !data.pattern.length) return;
+  $("authScreen").classList.add("show");
+  authStage = data.passwordHash ? 0 : 1;
+  authPattern = [];
+  $("authPassword").value = "";
+  $("authMessage").textContent = "";
+  $("authPasswordArea").classList.toggle("hidden", authStage !== 0);
+  $("authPatternArea").classList.toggle("hidden", authStage !== 1);
+  $("authSubmit").textContent =
+    authStage === 0 && data.pattern.length ? "비밀번호 확인" : "잠금 해제";
+}
+
+$("authSubmit").addEventListener("click", async () => {
+  if (authStage === 0) {
+    const entered = await hashPassword($("authPassword").value);
+    if (entered !== data.passwordHash) {
+      $("authMessage").textContent = "비밀번호가 올바르지 않습니다.";
+      return;
+    }
+    if (data.pattern.length) {
+      authStage = 1;
+      authPattern = [];
+      $("authPasswordArea").classList.add("hidden");
+      $("authPatternArea").classList.remove("hidden");
+      $("authMessage").textContent = "비밀번호 확인 완료. 패턴을 입력하세요.";
+      $("authSubmit").textContent = "패턴 확인";
+      return;
+    }
+  } else if (data.pattern.length) {
+    if (authPattern.join(",") !== data.pattern.join(",")) {
+      $("authMessage").textContent = "패턴이 일치하지 않습니다.";
+      authPattern = [];
+      clearPatternCanvas($("authPatternCanvas"));
+      return;
+    }
+  }
+  $("authScreen").classList.remove("show");
+});
+
+$("authPassword").addEventListener("keydown", e => {
+  if (e.key === "Enter") $("authSubmit").click();
+});
+
+renderVideo();
+clearPatternCanvas($("patternCanvas"));
+clearPatternCanvas($("authPatternCanvas"));
+setMode("click");
+beginAuthIfNeeded();
+
+})();
+</script>
+</body>
+  </html>
